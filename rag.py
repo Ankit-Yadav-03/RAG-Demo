@@ -3,12 +3,20 @@
 Pipeline: load docs -> chunk -> embed -> retrieve top-k -> answer -> cite.
 If the best match scores below --min-score, it says the answer is not in the documents.
 """
+import os
 import argparse
 import re
 import sys
+from dotenv import load_dotenv
 from pathlib import Path
 
 import numpy as np
+from sklearn.feature_extraction.text import TfidfVectorizer
+from google import genai
+from google.genai import types
+
+
+load_dotenv()
 
 EXTS = {".txt", ".md"}
 
@@ -51,7 +59,6 @@ class TfidfEmbedder:
     name = "tfidf"
 
     def __init__(self, texts):
-        from sklearn.feature_extraction.text import TfidfVectorizer
         self.vec = TfidfVectorizer(stop_words="english", ngram_range=(1, 2), sublinear_tf=True)
         self.vec.fit(texts)
 
@@ -68,7 +75,6 @@ class GeminiEmbedder:
         self.model = model
 
     def _embed(self, texts, task):
-        from google.genai import types
         out = []
         for i in range(0, len(texts), 100):  # API batch limit
             r = self.client.models.embed_content(
@@ -83,10 +89,8 @@ class GeminiEmbedder:
 
 
 def get_client():
-    import os
     if not os.environ.get("GEMINI_API_KEY"):
         sys.exit("GEMINI_API_KEY is not set. Get a key at https://aistudio.google.com/apikey")
-    from google import genai
     return genai.Client(api_key=os.environ["GEMINI_API_KEY"])
 
 
@@ -119,7 +123,6 @@ def extractive_answer(query, hits, embedder):
 
 
 def llm_answer(query, hits, model):
-    from google.genai import types
     ctx = "\n\n".join(f"[{i+1}] ({h['source']})\n{h['text']}" for i, (_, h) in enumerate(hits))
     r = get_client().models.generate_content(
         model=model,
